@@ -66,4 +66,5 @@ Example Dir Structure
 ```
 
 Forked from ansible role by [tgam-abarrett][url]
+
 [url]: https://github.com/globeandmail/ansible-role-amazon-cloudwatch-agent
