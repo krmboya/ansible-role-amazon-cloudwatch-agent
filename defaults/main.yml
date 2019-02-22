@@ -1,4 +1,2 @@
 ---
 aws_cwa_region: 'eu-west-1'
-aws_cwa_disk_monitor_paths:
-  - "/"
