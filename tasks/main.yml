@@ -37,24 +37,31 @@
 - name: Already installed?
   command: dpkg-query -l amazon-cloudwatch-agent
   register: already_installed
+  ignore_errors: yes
 
-- block:
-  - name: purge existing pkg if installed
-    apt:
-      name: amazon-cloudwatch-agent
-      state: absent
-      purge: yes
-  - name: purge dir tree if exists
-    file:
-      path: '/opt/aws/amazon-cloudwatch-agent'
-      state: absent
-  when: already_installed.stdout('no packages found') == -1
+
+- name: Uninstall agent if already installed
+  block:
+
+    - name: purge existing pkg if installed
+      apt:
+        name: amazon-cloudwatch-agent
+        state: absent
+        purge: yes
+
+    - name: purge dir tree if exists
+      file:
+        path: '/opt/aws/amazon-cloudwatch-agent'
+        state: absent
+
+  when: '"no packages found" not in already_installed.stdout'
 
 - name: Download aws-cloudwatch-agent installer package locally
   local_action:
-    get_url:
-      url: "https://s3.amazonaws.com/amazoncloudwatch-agent/debian/amd64/latest/amazon-cloudwatch-agent.deb"
-      dest: "/tmp/amazon-cloudwatch-agent.deb"
+    module: get_url
+    url: "https://s3.amazonaws.com/amazoncloudwatch-agent/debian/amd64/latest/amazon-cloudwatch-agent.deb"
+    dest: "/tmp/amazon-cloudwatch-agent.deb"
+  become: no
 
 - name: make temp dir for installation files
   file:
@@ -67,7 +74,7 @@
     dest: "/tmp/aws-cwa-inst"
 
 - name: run the installer
-  shell: dpkg -i -E "/tmp/aws-cws-inst/amazon-cloudwatch-agent.deb"
+  shell: dpkg -i -E "/tmp/aws-cwa-inst/amazon-cloudwatch-agent.deb"
 
 - name: remove temp dir
   file:
