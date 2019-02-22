@@ -1,7 +1,103 @@
 ---
-- name: Must be Ubuntu (12, 14, or 16) and 64-bit
-  fail:
-    msg: "This role is intended for use only with Ubuntu 12, 64-bit"
-  when: (ansible_architecture != 'x86_64') or ((ansible_distribution|lower != 'ubuntu') or (ansible_distribution_major_version not in ['12','14','16']))
+- name: Ensure /root/.aws/ is there
+  file:
+    path: '/root/.aws/'
+    state: 'directory'
+    mode: '0700'
+    owner: 'root'
+    group: 'root'
 
-- include_tasks: "{{ansible_distribution|lower}}-{{ansible_distribution_major_version}}.yml"
+- name: Add AWS CWA profile to /root/.aws/config
+  blockinfile:
+    path: '/root/.aws/config'
+    create: 'yes'
+    owner: 'root'
+    group: 'root'
+    mode: 0600
+    marker: "# {mark} ansible aws-cwa cfg"
+    block: |
+      [profile AmazonCloudWatchAgent]
+      output = json
+      region = {{ aws_cwa_region }}
+
+- name: Add AWS CWA profile to /root/.aws/credentials
+  blockinfile:
+    path: '/root/.aws/credentials'
+    create: 'yes'
+    owner: 'root'
+    group: 'root'
+    mode: 0600
+    marker: "# {mark} ansible aws-cwa cfg"
+    block: |
+      [AmazonCloudWatchAgent]
+      aws_access_key_id={{ aws_cwa_key_access }}
+      aws_secret_access_key={{ aws_cwa_key_secret }}
+  no_log: True
+
+- name: Already installed?
+  command: dpkg-query -l amazon-cloudwatch-agent
+  register: already_installed
+
+- block:
+  - name: purge existing pkg if installed
+    apt:
+      name: amazon-cloudwatch-agent
+      state: absent
+      purge: yes
+  - name: purge dir tree if exists
+    file:
+      path: '/opt/aws/amazon-cloudwatch-agent'
+      state: absent
+  when: already_installed.stdout('no packages found') == -1
+
+- name: Download aws-cloudwatch-agent installer package locally
+  local_action:
+    get_url:
+      url: "https://s3.amazonaws.com/amazoncloudwatch-agent/debian/amd64/latest/amazon-cloudwatch-agent.deb"
+      dest: "/tmp/amazon-cloudwatch-agent.deb"
+
+- name: make temp dir for installation files
+  file:
+    path: "/tmp/aws-cwa-inst"
+    state: "directory"
+
+- name: Copy the installer into the remote server
+  copy:
+    src: "/tmp/amazon-cloudwatch-agent.deb"
+    dest: "/tmp/aws-cwa-inst"
+
+- name: run the installer
+  shell: dpkg -i -E "/tmp/aws-cws-inst/amazon-cloudwatch-agent.deb"
+
+- name: remove temp dir
+  file:
+    path: "/tmp/aws-cwa-inst/"
+    state: "absent"
+
+- name: place the agent configuration, ie. amazon-cloudwatch-agent.json
+  template:
+    src: "amazon-cloudwatch-agent.json.j2"
+    dest: "/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json"
+    mode: 0644
+
+- name: Start the cloudwatch agent
+  shell: "/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m onPremise -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s"
+
+- name: enable service on boot
+  service:
+    name: "amazon-cloudwatch-agent"
+    enabled: "yes"
+
+- name: Add log rotation for amazon-cloudwatch-agent.log
+  copy:
+    dest: '/etc/logrotate.d/aws-cwa'
+    owner: 'root'
+    group: 'root'
+    content: |
+        /opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log {
+            size 50M
+            rotate 5
+            compress
+            missingok
+            copytruncate
+        }
