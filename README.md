@@ -30,10 +30,10 @@ aws_cwa_key_secret: (encrypted)SECRETKEYGOESHERE
 
 
 
-### aws_cwa_namespace
-The namespace prefix for the namespace in which your metrics will reside (e.g. 'airtel_tz/host1').
+### aws_cwa_namespace_prefix
+The namespace prefix for the namespace in which your metrics and logs will reside (e.g. 'foo/host1').
 ```
-aws_cwa_namespace_prefix: "airtel_tz"
+aws_cwa_namespace_prefix: "foo"
 ```
 
 Example Playbook
